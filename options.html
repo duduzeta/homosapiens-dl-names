@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Homosapiens Download Names</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      max-width: 720px; margin: 0 auto; padding: 24px 20px 48px;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 28px 0 8px; }
+    p.muted, .muted { opacity: .7; font-size: 13px; }
+    label { display: block; font-weight: 600; margin: 14px 0 4px; }
+    input[type=text], input[type=password], input[type=number], textarea {
+      width: 100%; box-sizing: border-box; padding: 8px 10px; font: inherit;
+      border: 1px solid rgba(127,127,127,.5); border-radius: 6px; background: transparent; color: inherit;
+    }
+    textarea { min-height: 96px; resize: vertical; }
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
+    .check { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-weight: 600; }
+    .check input { width: 16px; height: 16px; }
+    .actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
+    button {
+      font: inherit; padding: 8px 14px; border-radius: 6px; cursor: pointer;
+      border: 1px solid rgba(127,127,127,.5); background: transparent; color: inherit;
+    }
+    button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+    #status { font-size: 13px; }
+    #status.ok { color: #16a34a; } #status.err { color: #dc2626; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(127,127,127,.3); vertical-align: top; }
+    th { font-weight: 600; opacity: .8; }
+    td.err { color: #dc2626; }
+    code { font-size: 12px; }
+    .hint { font-size: 12px; opacity: .7; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Homosapiens Download Names</h1>
+  <p class="muted">Renomeia downloads com nomes que fazem sentido, usando o contexto da página e um modelo via API do z.ai.</p>
+
+  <label class="check"><input type="checkbox" id="enabled" /> Ativar renomeação automática</label>
+
+  <h2>Conexão</h2>
+  <label for="apiKey">API key do z.ai</label>
+  <input type="password" id="apiKey" placeholder="xxxxxxxx.xxxxxxxxxxxx" autocomplete="off" />
+  <div class="hint">Fica salva só neste navegador (chrome.storage.local).</div>
+
+  <div class="row">
+    <div>
+      <label for="baseUrl">Base URL</label>
+      <input type="text" id="baseUrl" />
+      <div class="hint">Plano normal: <code>https://api.z.ai/api/paas/v4</code> · Coding Plan: <code>https://api.z.ai/api/coding/paas/v4</code></div>
+    </div>
+    <div>
+      <label for="model">Modelo</label>
+      <input type="text" id="model" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label for="timeoutMs">Timeout (ms)</label>
+      <input type="number" id="timeoutMs" min="1000" max="14000" step="500" />
+      <div class="hint">Se o modelo não responder a tempo, o nome original é mantido. Máximo ~14s (limite do Chrome).</div>
+    </div>
+    <div>
+      <label for="maxLength">Tamanho máximo do nome</label>
+      <input type="number" id="maxLength" min="20" max="200" />
+    </div>
+  </div>
+
+  <label class="check"><input type="checkbox" id="thinking" /> Usar modo "thinking" do GLM (nomes melhores, +3–8 s por download)</label>
+  <div class="hint">Se ativar, aumente o timeout para ~14 s.</div>
+
+  <h2>Estilo dos nomes</h2>
+  <label for="style">Instruções para o modelo</label>
+  <textarea id="style"></textarea>
+  <div class="hint">Idioma, formato (Title Case, kebab-case…), o que incluir. A extensão do arquivo é sempre preservada.</div>
+
+  <div class="actions">
+    <button class="primary" id="save">Salvar</button>
+    <button id="test">Testar conexão</button>
+    <button id="reset">Restaurar padrões</button>
+    <span id="status"></span>
+  </div>
+
+  <h2>Últimos downloads</h2>
+  <div class="actions" style="margin-top:0">
+    <button id="refresh">Atualizar</button>
+    <button id="clear">Limpar histórico</button>
+  </div>
+  <table id="history">
+    <thead><tr><th>Quando</th><th>Original</th><th>Novo nome</th><th>O que o modelo entendeu</th><th>ms</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="muted" id="empty">Nenhum download ainda.</p>
+  <p class="hint">Clique em "contexto" numa linha pra ver exatamente o que foi enviado ao modelo. Se o contexto estiver pobre, o problema é a coleta; se estiver bom e o nome ruim, é o prompt/modelo.</p>
+  <pre id="detail" hidden style="white-space:pre-wrap;font-size:12px;border:1px solid rgba(127,127,127,.4);border-radius:6px;padding:10px;max-height:400px;overflow:auto"></pre>
+
+  <script src="options.js"></script>
+</body>
+</html>

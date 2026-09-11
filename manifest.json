@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Homosapiens Download Names",
+  "version": "0.1.0",
+  "description": "Renomeia downloads automaticamente com nomes descritivos gerados por IA (GLM via z.ai), usando o contexto da página.",
+  "permissions": ["downloads", "tabs", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Homosapiens Download Names — configurações"
+  }
+}
