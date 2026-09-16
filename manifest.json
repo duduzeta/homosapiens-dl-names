@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Homosapiens Download Names",
   "version": "0.1.0",
-  "description": "Renomeia downloads automaticamente com nomes descritivos gerados por IA (GLM via z.ai), usando o contexto da página.",
+  "description": "Renomeia downloads automaticamente com nomes descritivos gerados pelo LLM que você escolher (z.ai, OpenAI, Anthropic, Gemini, Ollama…), usando o contexto da página.",
   "permissions": ["downloads", "tabs", "scripting", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": {

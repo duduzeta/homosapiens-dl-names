@@ -1,11 +1,12 @@
-const FIELDS = ["enabled", "apiKey", "baseUrl", "model", "timeoutMs", "maxLength", "style"];
 const $ = (id) => document.getElementById(id);
 
 let DEFAULTS = {};
+let PROVIDERS = {};
 
 function readForm() {
   return {
     enabled: $("enabled").checked,
+    provider: $("provider").value,
     apiKey: $("apiKey").value.trim(),
     baseUrl: $("baseUrl").value.trim(),
     model: $("model").value.trim(),
@@ -19,12 +20,47 @@ function readForm() {
 function fillForm(s) {
   $("enabled").checked = !!s.enabled;
   $("thinking").checked = !!s.thinking;
+  $("provider").value = PROVIDERS[s.provider] ? s.provider : DEFAULTS.provider;
   $("apiKey").value = s.apiKey || "";
   $("baseUrl").value = s.baseUrl || "";
   $("model").value = s.model || "";
   $("timeoutMs").value = s.timeoutMs;
   $("maxLength").value = s.maxLength;
   $("style").value = s.style || "";
+  updateProviderHints();
+}
+
+function fillProviderSelect() {
+  const sel = $("provider");
+  sel.textContent = "";
+  for (const [id, p] of Object.entries(PROVIDERS)) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = p.label;
+    sel.appendChild(opt);
+  }
+}
+
+// Ao trocar de provedor, preenche URL e modelo com o preset dele.
+function onProviderChange() {
+  const p = PROVIDERS[$("provider").value];
+  if (!p) return;
+  $("baseUrl").value = p.baseUrl;
+  $("model").value = p.model;
+  updateProviderHints();
+}
+
+function updateProviderHints() {
+  const p = PROVIDERS[$("provider").value] || {};
+  const needsKey = p.needsKey !== false;
+  $("apiKeyHint").textContent = needsKey
+    ? "Fica salva só neste navegador (chrome.storage.local)."
+    : "Opcional para este provedor (servidores locais normalmente não pedem chave).";
+  $("apiKey").placeholder = needsKey ? "sua API key" : "(opcional)";
+  $("modelHint").textContent = p.model ? `Sugerido: ${p.model}` : "Nome do modelo que o servidor expõe.";
+  const thinkingRow = $("thinkingRow");
+  thinkingRow.hidden = !p.thinking;
+  $("thinkingHint").hidden = !p.thinking;
 }
 
 function clamp(n, min, max, fallback) {
@@ -39,7 +75,10 @@ function setStatus(text, kind) {
 }
 
 async function load() {
-  DEFAULTS = await chrome.runtime.sendMessage({ type: "defaults" });
+  const res = await chrome.runtime.sendMessage({ type: "defaults" });
+  DEFAULTS = res.defaults;
+  PROVIDERS = res.providers;
+  fillProviderSelect();
   const { settings = {} } = await chrome.storage.local.get("settings");
   fillForm({ ...DEFAULTS, ...settings });
   await renderHistory();
@@ -55,7 +94,9 @@ async function save() {
 
 async function test() {
   const settings = readForm();
-  if (!settings.apiKey) return setStatus("Informe a API key primeiro.", "err");
+  const p = PROVIDERS[settings.provider] || {};
+  if (!settings.apiKey && p.needsKey !== false) return setStatus("Informe a API key primeiro.", "err");
+  if (!settings.baseUrl) return setStatus("Informe a Base URL.", "err");
   setStatus("Testando…");
   $("test").disabled = true;
   try {
@@ -121,6 +162,7 @@ async function clearHistory() {
   await renderHistory();
 }
 
+$("provider").addEventListener("change", onProviderChange);
 $("save").addEventListener("click", save);
 $("test").addEventListener("click", test);
 $("reset").addEventListener("click", reset);

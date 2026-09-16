@@ -13,7 +13,7 @@
     h2 { font-size: 15px; margin: 28px 0 8px; }
     p.muted, .muted { opacity: .7; font-size: 13px; }
     label { display: block; font-weight: 600; margin: 14px 0 4px; }
-    input[type=text], input[type=password], input[type=number], textarea {
+    input[type=text], input[type=password], input[type=number], textarea, select {
       width: 100%; box-sizing: border-box; padding: 8px 10px; font: inherit;
       border: 1px solid rgba(127,127,127,.5); border-radius: 6px; background: transparent; color: inherit;
     }
@@ -40,24 +40,29 @@
 </head>
 <body>
   <h1>Homosapiens Download Names</h1>
-  <p class="muted">Renomeia downloads com nomes que fazem sentido, usando o contexto da página e um modelo via API do z.ai.</p>
+  <p class="muted">Renomeia downloads com nomes que fazem sentido, usando o contexto da página e o LLM que você escolher (z.ai, OpenAI, Anthropic, Gemini, Ollama…).</p>
 
   <label class="check"><input type="checkbox" id="enabled" /> Ativar renomeação automática</label>
 
   <h2>Conexão</h2>
-  <label for="apiKey">API key do z.ai</label>
-  <input type="password" id="apiKey" placeholder="xxxxxxxx.xxxxxxxxxxxx" autocomplete="off" />
-  <div class="hint">Fica salva só neste navegador (chrome.storage.local).</div>
+  <label for="provider">Provedor</label>
+  <select id="provider"></select>
+  <div class="hint">Trocar o provedor preenche a Base URL e o modelo sugerido; você pode editar os dois depois.</div>
+
+  <label for="apiKey">API key</label>
+  <input type="password" id="apiKey" placeholder="sua API key" autocomplete="off" />
+  <div class="hint" id="apiKeyHint">Fica salva só neste navegador (chrome.storage.local).</div>
 
   <div class="row">
     <div>
       <label for="baseUrl">Base URL</label>
       <input type="text" id="baseUrl" />
-      <div class="hint">Plano normal: <code>https://api.z.ai/api/paas/v4</code> · Coding Plan: <code>https://api.z.ai/api/coding/paas/v4</code></div>
+      <div class="hint">Raiz da API, sem <code>/chat/completions</code>. z.ai Coding Plan: <code>https://api.z.ai/api/coding/paas/v4</code></div>
     </div>
     <div>
       <label for="model">Modelo</label>
       <input type="text" id="model" />
+      <div class="hint" id="modelHint"></div>
     </div>
   </div>
 
@@ -73,8 +78,8 @@
     </div>
   </div>
 
-  <label class="check"><input type="checkbox" id="thinking" /> Usar modo "thinking" do GLM (nomes melhores, +3–8 s por download)</label>
-  <div class="hint">Se ativar, aumente o timeout para ~14 s.</div>
+  <label class="check" id="thinkingRow"><input type="checkbox" id="thinking" /> Usar modo "thinking"/raciocínio do modelo (nomes melhores, +3–8 s por download)</label>
+  <div class="hint" id="thinkingHint">Se ativar, aumente o timeout para ~14 s. Só aparece para provedores que expõem esse controle.</div>
 
   <h2>Estilo dos nomes</h2>
   <label for="style">Instruções para o modelo</label>

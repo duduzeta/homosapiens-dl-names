@@ -1,10 +1,29 @@
 // Service worker: intercepta downloads e pede um nome descritivo ao modelo.
 
+// Provedores conhecidos. `api` é o formato do wire: "openai" (POST /chat/completions, compatível
+// com a maioria dos provedores) ou "anthropic" (POST /messages). `thinking` diz como mapear o
+// toggle de "thinking" para aquele provedor (parâmetros desconhecidos dão 400 na OpenAI, então
+// só mandamos o que cada um entende). `needsKey: false` permite servidores locais sem chave.
+const PROVIDERS = {
+  zai: { label: "z.ai (GLM)", api: "openai", baseUrl: "https://api.z.ai/api/paas/v4", model: "glm-4.7", thinking: "glm" },
+  openai: { label: "OpenAI", api: "openai", baseUrl: "https://api.openai.com/v1", model: "gpt-4.1-mini", thinking: "reasoning_effort" },
+  anthropic: { label: "Anthropic (Claude)", api: "anthropic", baseUrl: "https://api.anthropic.com/v1", model: "claude-opus-5", thinking: "anthropic" },
+  gemini: { label: "Google Gemini", api: "openai", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash", thinking: "reasoning_effort" },
+  openrouter: { label: "OpenRouter", api: "openai", baseUrl: "https://openrouter.ai/api/v1", model: "google/gemini-2.5-flash", thinking: "openrouter" },
+  groq: { label: "Groq", api: "openai", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile", thinking: null },
+  deepseek: { label: "DeepSeek", api: "openai", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", thinking: null },
+  mistral: { label: "Mistral", api: "openai", baseUrl: "https://api.mistral.ai/v1", model: "mistral-small-latest", thinking: null },
+  ollama: { label: "Ollama (local)", api: "openai", baseUrl: "http://localhost:11434/v1", model: "llama3.2", thinking: null, needsKey: false },
+  lmstudio: { label: "LM Studio (local)", api: "openai", baseUrl: "http://localhost:1234/v1", model: "", thinking: null, needsKey: false },
+  custom: { label: "Outro (compatível com OpenAI)", api: "openai", baseUrl: "", model: "", thinking: null, needsKey: false },
+};
+
 const DEFAULTS = {
   enabled: true,
+  provider: "zai",
   apiKey: "",
-  baseUrl: "https://api.z.ai/api/paas/v4",
-  model: "glm-4.7",
+  baseUrl: PROVIDERS.zai.baseUrl,
+  model: PROVIDERS.zai.model,
   timeoutMs: 12000,
   maxLength: 90,
   thinking: false,
@@ -35,8 +54,12 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
 async function handleDownload(item) {
   const settings = await getSettings();
   if (!settings.enabled) return null;
-  if (!settings.apiKey) {
+  if (!settings.apiKey && providerOf(settings).needsKey !== false) {
     console.warn("[dl-names] API key não configurada.");
+    return null;
+  }
+  if (!settings.baseUrl) {
+    console.warn("[dl-names] Base URL não configurada.");
     return null;
   }
 
@@ -222,9 +245,29 @@ function buildPrompt(settings, { original, ext, item, context }) {
   return { system, user: sections.join("\n\n") };
 }
 
+function providerOf(settings) {
+  return PROVIDERS[settings.provider] || PROVIDERS.custom;
+}
+
 async function askModel(settings, args) {
   const { system, user } = buildPrompt(settings, args);
+  const provider = providerOf(settings);
+  const maxTokens = settings.thinking ? 2000 : 300;
 
+  const req =
+    provider.api === "anthropic"
+      ? anthropicRequest(settings, provider, { system, user, maxTokens })
+      : openaiRequest(settings, provider, { system, user, maxTokens });
+
+  const data = await postJson(req, settings.timeoutMs);
+  const content = provider.api === "anthropic" ? anthropicText(data) : openaiText(data);
+  const parsed = parseFilename(content);
+  return { ...parsed, raw: content, prompt: user };
+}
+
+// ---- wire "openai": /chat/completions (z.ai, OpenAI, Gemini, OpenRouter, Groq, Ollama, …)
+
+function openaiRequest(settings, provider, { system, user, maxTokens }) {
   const body = {
     model: settings.model,
     messages: [
@@ -232,31 +275,77 @@ async function askModel(settings, args) {
       { role: "user", content: user },
     ],
     temperature: 0.2,
-    max_tokens: settings.thinking ? 2000 : 300,
-    // GLM: modo pensante melhora a qualidade mas custa alguns segundos
-    thinking: { type: settings.thinking ? "enabled" : "disabled" },
+    max_tokens: maxTokens,
   };
+  // Cada provedor tem um jeito de ligar o "thinking"; campos desconhecidos dão 400 em alguns.
+  switch (provider.thinking) {
+    case "glm":
+      body.thinking = { type: settings.thinking ? "enabled" : "disabled" };
+      break;
+    case "reasoning_effort":
+      // só manda quando ligado: modelos sem raciocínio rejeitam o campo
+      if (settings.thinking) body.reasoning_effort = "medium";
+      break;
+    case "openrouter":
+      if (settings.thinking) body.reasoning = { effort: "medium" };
+      break;
+  }
+  const headers = { "Content-Type": "application/json" };
+  if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
+  return { url: `${settings.baseUrl.replace(/\/+$/, "")}/chat/completions`, headers, body };
+}
 
+function openaiText(data) {
+  const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+  return (msg && msg.content) || "";
+}
+
+// ---- wire "anthropic": /messages
+
+function anthropicRequest(settings, provider, { system, user, maxTokens }) {
+  const body = {
+    model: settings.model,
+    system,
+    messages: [{ role: "user", content: user }],
+    max_tokens: maxTokens,
+  };
+  const legacyThinking = /claude-(3|haiku-4-5|sonnet-4-5|opus-4-5)/.test(settings.model);
+  if (settings.thinking) {
+    // Modelos 4.6+ usam thinking adaptativo; Haiku 4.5 e anteriores ainda usam budget_tokens.
+    body.thinking = legacyThinking ? { type: "enabled", budget_tokens: 1024 } : { type: "adaptive" };
+    if (legacyThinking) body.max_tokens = Math.max(maxTokens, 1500);
+  } else if (!legacyThinking) {
+    // Opus 5 pensa por padrão; effort baixo mantém a resposta rápida sem desligar o thinking.
+    body.output_config = { effort: "low" };
+  }
+  const headers = {
+    "Content-Type": "application/json",
+    "x-api-key": settings.apiKey,
+    "anthropic-version": "2023-06-01",
+    // A chave é do próprio usuário e fica só no storage local da extensão.
+    "anthropic-dangerous-direct-browser-access": "true",
+  };
+  return { url: `${settings.baseUrl.replace(/\/+$/, "")}/messages`, headers, body };
+}
+
+function anthropicText(data) {
+  const blocks = (data && data.content) || [];
+  return blocks
+    .filter((b) => b && b.type === "text")
+    .map((b) => b.text)
+    .join("\n");
+}
+
+async function postJson({ url, headers, body }, timeoutMs) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), settings.timeoutMs);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${settings.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: controller.signal });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
     }
-    const data = await res.json();
-    const content = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
-    const parsed = parseFilename(content);
-    return { ...parsed, raw: content, prompt: user };
+    return res.json();
   } finally {
     clearTimeout(timer);
   }
@@ -372,6 +461,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg && msg.type === "defaults") {
-    sendResponse(DEFAULTS);
+    sendResponse({ defaults: DEFAULTS, providers: PROVIDERS });
   }
 });
