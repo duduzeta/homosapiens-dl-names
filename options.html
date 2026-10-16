@@ -40,43 +40,52 @@
 </head>
 <body>
   <h1>Homosapiens Download Names</h1>
-  <p class="muted">Renomeia downloads com nomes que fazem sentido, usando o contexto da página e o LLM que você escolher (z.ai, OpenAI, Anthropic, Gemini, Ollama…).</p>
+  <p class="muted">Renomeia downloads com nomes que fazem sentido, usando o contexto da página e o LLM que você escolher.</p>
 
   <label class="check"><input type="checkbox" id="enabled" /> Ativar renomeação automática</label>
 
   <h2>Conexão</h2>
   <label for="provider">Provedor</label>
   <select id="provider"></select>
-  <div class="hint">Trocar o provedor preenche a Base URL e o modelo sugerido; você pode editar os dois depois.</div>
+  <div class="hint">Trocar o provedor preenche a Base URL e o modelo sugerido. Cada provedor guarda a própria chave.</div>
+  <div class="hint" id="providerNote" hidden></div>
 
   <label for="apiKey">API key</label>
   <input type="password" id="apiKey" placeholder="sua API key" autocomplete="off" />
-  <div class="hint" id="apiKeyHint">Fica salva só neste navegador (chrome.storage.local).</div>
+  <div class="hint"><span id="apiKeyHint"></span> <a id="keyLink" target="_blank" rel="noopener" hidden>Pegar uma chave ↗</a></div>
 
   <div class="row">
+    <div>
+      <label for="modelSelect">Modelo</label>
+      <select id="modelSelect"></select>
+      <input type="text" id="model" placeholder="nome do modelo" style="margin-top:6px" />
+      <div class="hint" id="modelHint"></div>
+    </div>
     <div>
       <label for="baseUrl">Base URL</label>
       <input type="text" id="baseUrl" />
-      <div class="hint">Raiz da API, sem <code>/chat/completions</code>. z.ai Coding Plan: <code>https://api.z.ai/api/coding/paas/v4</code></div>
-    </div>
-    <div>
-      <label for="model">Modelo</label>
-      <input type="text" id="model" />
-      <div class="hint" id="modelHint"></div>
+      <div class="hint">Raiz da API, sem <code>/chat/completions</code>. Normalmente não precisa mexer.</div>
     </div>
   </div>
 
   <div class="row">
     <div>
-      <label for="timeoutMs">Timeout (ms)</label>
-      <input type="number" id="timeoutMs" min="1000" max="14000" step="500" />
-      <div class="hint">Se o modelo não responder a tempo, o nome original é mantido. Máximo ~14s (limite do Chrome).</div>
+      <label for="deadlineMs">Espera máxima no download (ms)</label>
+      <input type="number" id="deadlineMs" min="100" max="10000" step="50" />
+      <div class="hint">Quanto o download pode esperar pelo modelo. Passou disso, usa um nome montado na hora com o texto da página (botão, linha, título).</div>
     </div>
     <div>
-      <label for="maxLength">Tamanho máximo do nome</label>
-      <input type="number" id="maxLength" min="20" max="200" />
+      <label for="timeoutMs">Timeout da chamada (ms)</label>
+      <input type="number" id="timeoutMs" min="1000" max="14000" step="500" />
+      <div class="hint">Limite de cada chamada ao modelo, inclusive as feitas antes do clique.</div>
     </div>
   </div>
+
+  <label for="maxLength">Tamanho máximo do nome</label>
+  <input type="number" id="maxLength" min="20" max="200" style="max-width:160px" />
+
+  <label class="check"><input type="checkbox" id="hoverPrefetch" /> Preparar o nome já no hover de links/botões de download</label>
+  <div class="hint">Deixa o nome pronto antes do clique. Gasta algumas chamadas a mais (no máximo 15/min) quando você passa o mouse e não clica.</div>
 
   <label class="check" id="thinkingRow"><input type="checkbox" id="thinking" /> Usar modo "thinking"/raciocínio do modelo (nomes melhores, +3–8 s por download)</label>
   <div class="hint" id="thinkingHint">Se ativar, aumente o timeout para ~14 s. Só aparece para provedores que expõem esse controle.</div>
@@ -96,10 +105,11 @@
   <h2>Últimos downloads</h2>
   <div class="actions" style="margin-top:0">
     <button id="refresh">Atualizar</button>
+    <button id="export">Exportar (JSON)</button>
     <button id="clear">Limpar histórico</button>
   </div>
   <table id="history">
-    <thead><tr><th>Quando</th><th>Original</th><th>Novo nome</th><th>O que o modelo entendeu</th><th>ms</th><th></th></tr></thead>
+    <thead><tr><th>Quando</th><th>Original</th><th>Novo nome</th><th>Origem do nome</th><th>Modelo</th><th>Espera (ms)</th><th></th></tr></thead>
     <tbody></tbody>
   </table>
   <p class="muted" id="empty">Nenhum download ainda.</p>
